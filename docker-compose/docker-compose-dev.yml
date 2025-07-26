@@ -26,17 +26,17 @@ services:
       retries: 20 # Intenta hasta 20 veces (100 segundos en total)
       start_period: 20s 
     
-  mysql-db:
+  mysql-db-cliente1:
     image : mysql:5.7
     ports:
       - "3307:3306"
     environment:
       MYSQL_ROOT_PASSWORD: mysql 
-      MYSQL_DATABASE: practica_db
+      MYSQL_DATABASE: practica_db_cliente1
     mem_limit: 1500m
     cpus: "2.0"
     volumes:
-      - mysql_data:/var/lib/mysql
+      - volumes_data_cliente1:/var/lib/mysql
     networks:
       - practica
     healthcheck:
@@ -45,7 +45,7 @@ services:
       timeout: 10s
       retries: 10
       start_period: 10s
-  
+
   cliente1:
     build: # <-- ¡PARA DESARROLLO, NECESITAS 'BUILD' para que compile el código local!
       context: ../Cliente1 # <-- ¡¡RUTA CORRECTA A LA CARPETA RAÍZ DE CLIENTE1!! Cuidado con el espacio en "Cliente 1"
@@ -60,7 +60,7 @@ services:
     depends_on:
        configserver:
         condition: service_healthy # <-- CAMBIAR ESTO
-       mysql-db:
+       mysql-db-cliente1:
         condition: service_healthy #
     volumes: # <-- ¡¡VOLUMES PARA DESARROLLO DE CLIENTE1!!
       - ../Cliente1/src:/app/src # Sube tres niveles, entra en 'Cliente 1', luego 'src'
@@ -70,13 +70,63 @@ services:
     environment:
       SPRING_PROFILES_ACTIVE: dev
       SPRING_CONFIG_IMPORT: optional:configserver:http://configserver:8080
-      SPRING_DATASOURCE_URL: jdbc:mysql://mysql-db:3306/practica_db?createDatabaseIfNotExist=true
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql-db-cliente1:3306/practica_db_cliente1?createDatabaseIfNotExist=true
       SPRING_DATASOURCE_USERNAME: root
       SPRING_DATASOURCE_PASSWORD: mysql
       SPRING_JPA_HIBERNATE_DDL_AUTO: update
-      
+
+  mysql-db-producto:
+    image:  mysql:5.7
+    ports:
+      - "3308:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: mysql 
+      MYSQL_DATABASE: practica_db_productos
+    mem_limit: 1500m
+    cpus: "2.0"
+    volumes:
+      - volumes_data_producto:/var/lib/mysql
+    networks:
+      - practica
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p$$MYSQL_ROOT_PASSWORD"]
+      interval: 5s
+      timeout: 10s
+      retries: 10
+      start_period: 10s
+
+  productos:
+    build: # <-- ¡PARA DESARROLLO, NECESITAS 'BUILD' para que compile el código local!
+      context: ../Productos # <-- ¡¡RUTA CORRECTA A LA CARPETA RAÍZ DE CLIENTE1!! Cuidado con el espacio en "Cliente 1"
+      dockerfile: Dockerfile # El Dockerfile está directamente en 'Cliente 1\'
+    image: sandrocordova/udemy-microservicios:productos
+    ports:
+      - "8082:8082"
+    mem_limit: 1500m
+    cpus: "2.0"
+    networks:
+      - practica
+    depends_on:
+       configserver:
+        condition: service_healthy # <-- CAMBIAR ESTO
+       mysql-db-producto:
+        condition: service_healthy #
+    volumes: # <-- ¡¡VOLUMES PARA DESARROLLO DE CLIENTE1!!
+      - ../Productos/src:/app/src # Sube tres niveles, entra en 'Cliente 1', luego 'src'
+      - ../Productos/pom.xml:/app/pom.xml # Sube tres niveles, entra en 'Cliente 1', para el pom.xml
+      #- ~/.m2:/root/.m2 # Tu caché de Maven (para descargas rápidas en el contenedor)
+    command: mvn spring-boot:run -Dspring.jpa.hibernate.ddl-auto=update # <-- Para que el contenedor compile y ejecute tu código en tiempo real
+    environment:
+      SPRING_PROFILES_ACTIVE: dev
+      SPRING_CONFIG_IMPORT: optional:configserver:http://configserver:8080
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql-db-producto:3306/practica_db_productos?createDatabaseIfNotExist=true
+      SPRING_DATASOURCE_USERNAME: root
+      SPRING_DATASOURCE_PASSWORD: mysql
+      SPRING_JPA_HIBERNATE_DDL_AUTO: update
+    
 networks:
   practica: 
     driver: bridge
 volumes:
-  mysql_data:
+  volumes_data_cliente1:
+  volumes_data_producto:

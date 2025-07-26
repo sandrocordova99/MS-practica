@@ -1,4 +1,4 @@
-package com.micro.Cliente1.modelo;
+package com.example.Productos.Modelos;
 
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
@@ -8,13 +8,14 @@ import jakarta.persistence.Table;
 import lombok.Data;
 
 @Entity
-@Table(name = "cliente1")
+@Table(name = "productos")
 @Data
-public class Cliente1 {
+public class Productos {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY) // ESENCIAL para MySQL AUTO_INCREMENT
-    private Long id; // ID debe ser Long o Integer para IDENTITY
+    @GeneratedValue(strategy = GenerationType.IDENTITY)  
+    private Long id;  
 
     private String nombre;
+
 }
