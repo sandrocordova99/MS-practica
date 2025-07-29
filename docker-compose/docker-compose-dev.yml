@@ -1,11 +1,28 @@
-#version: '3.8'
+version: '3.8'
 
 services:
-
+  eurekaserver:
+    build:
+      context: ../Eureka
+      dockerfile: Dockerfile
+    image: sandrocordova/udemy-microservicios:eureka
+    ports:
+    - "8090:8090"
+    mem_limit: 1500m
+    cpus: "2.0"
+    networks:
+      - practica
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8090/actuator/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 20s
+      
   configserver:
-    build: # Para construir la imagen de tu microservicio Spring
-      context: ../configuracion # <-- ¡¡IMPORTANTE!! Sube DOS NIVELES para llegar a 'configuracion\'
-      dockerfile: Dockerfile # El Dockerfile está directamente en 'configuracion\'
+    build:
+      context: ../configuracion
+      dockerfile: Dockerfile
     image: sandrocordova/udemy-microservicios:configserve
     ports:
       - "8080:8080"
@@ -13,21 +30,28 @@ services:
     cpus: "2.0"
     networks:
       - practica
-    environment: # <-- ¡¡¡AQUÍ ESTÁ LA SOLUCIÓN!!!
-      SPRING_PROFILES_ACTIVE: git # Activa el perfil 'git'
-      SPRING_CLOUD_CONFIG_SERVER_GIT_URI: https://github.com/sandrocordova99/Udemy-configservems-practica.git # La URL de tu repo Git
-      SPRING_CLOUD_CONFIG_SERVER_GIT_CLONE_ON_START: "true" # Clona el repo al iniciar
-      SPRING_CLOUD_CONFIG_SERVER_GIT_DEFAULT_LABEL: config # La rama remota
-      SPRING_CLOUD_CONFIG_SERVER_GIT_TIMEOUT: "10" # Timeout para Git
-    healthcheck: # <-- AÑADIR ESTO
-      test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"] # Un endpoint de Spring Boot Health Check
+    depends_on:
+      eurekaserver:
+        condition: service_healthy
+    environment:
+      SPRING_PROFILES_ACTIVE: git
+      SPRING_CLOUD_CONFIG_SERVER_GIT_URI: https://github.com/sandrocordova99/Udemy-configservems-practica.git
+      SPRING_CLOUD_CONFIG_SERVER_GIT_CLONE_ON_START: "true"
+      SPRING_CLOUD_CONFIG_SERVER_GIT_DEFAULT_LABEL: config
+      SPRING_CLOUD_CONFIG_SERVER_GIT_TIMEOUT: "10"
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eurekaserver:8090/eureka/
+      # ACTUATOR CONFIG - AÑADIDO
+      MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: "*"
+      MANAGEMENT_ENDPOINT_HEALTH_SHOW_DETAILS: "always"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
       interval: 5s
       timeout: 3s
-      retries: 20 # Intenta hasta 20 veces (100 segundos en total)
+      retries: 20
       start_period: 20s 
-    
+
   mysql-db-cliente1:
-    image : mysql:5.7
+    image: mysql:5.7
     ports:
       - "3307:3306"
     environment:
@@ -47,9 +71,9 @@ services:
       start_period: 10s
 
   cliente1:
-    build: # <-- ¡PARA DESARROLLO, NECESITAS 'BUILD' para que compile el código local!
-      context: ../Cliente1 # <-- ¡¡RUTA CORRECTA A LA CARPETA RAÍZ DE CLIENTE1!! Cuidado con el espacio en "Cliente 1"
-      dockerfile: Dockerfile # El Dockerfile está directamente en 'Cliente 1\'
+    build:
+      context: ../Cliente1
+      dockerfile: Dockerfile
     image: sandrocordova/udemy-microservicios:cliente1
     ports:
       - "8081:8081"
@@ -58,15 +82,16 @@ services:
     networks:
       - practica
     depends_on:
-       configserver:
-        condition: service_healthy # <-- CAMBIAR ESTO
-       mysql-db-cliente1:
-        condition: service_healthy #
-    volumes: # <-- ¡¡VOLUMES PARA DESARROLLO DE CLIENTE1!!
-      - ../Cliente1/src:/app/src # Sube tres niveles, entra en 'Cliente 1', luego 'src'
-      - ../Cliente1/pom.xml:/app/pom.xml # Sube tres niveles, entra en 'Cliente 1', para el pom.xml
-      #- ~/.m2:/root/.m2 # Tu caché de Maven (para descargas rápidas en el contenedor)
-    command: mvn spring-boot:run -Dspring.jpa.hibernate.ddl-auto=update # <-- Para que el contenedor compile y ejecute tu código en tiempo real
+      configserver:
+        condition: service_healthy
+      mysql-db-cliente1:
+        condition: service_healthy
+      eurekaserver:
+        condition: service_healthy
+    volumes:
+      - ../Cliente1/src:/app/src
+      - ../Cliente1/pom.xml:/app/pom.xml
+    command: mvn spring-boot:run -Dspring.jpa.hibernate.ddl-auto=update
     environment:
       SPRING_PROFILES_ACTIVE: dev
       SPRING_CONFIG_IMPORT: optional:configserver:http://configserver:8080
@@ -74,9 +99,20 @@ services:
       SPRING_DATASOURCE_USERNAME: root
       SPRING_DATASOURCE_PASSWORD: mysql
       SPRING_JPA_HIBERNATE_DDL_AUTO: update
+      
+      # CONFIGURACIÓN EUREKA PARA QUE FUNCIONE EL LINK
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eurekaserver:8090/eureka/
+      EUREKA_INSTANCE_PREFER_IP_ADDRESS: "false"
+      EUREKA_INSTANCE_HOSTNAME: localhost
+      EUREKA_INSTANCE_INSTANCE_ID: cliente1:localhost:8081
+      
+      # ACTUATOR CONFIG
+      MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: "*"
+      MANAGEMENT_ENDPOINT_HEALTH_SHOW_DETAILS: "always"
+      MANAGEMENT_ENDPOINT_INFO_ENABLED: "true"
 
   mysql-db-producto:
-    image:  mysql:5.7
+    image: mysql:5.7
     ports:
       - "3308:3306"
     environment:
@@ -96,9 +132,9 @@ services:
       start_period: 10s
 
   productos:
-    build: # <-- ¡PARA DESARROLLO, NECESITAS 'BUILD' para que compile el código local!
-      context: ../Productos # <-- ¡¡RUTA CORRECTA A LA CARPETA RAÍZ DE CLIENTE1!! Cuidado con el espacio en "Cliente 1"
-      dockerfile: Dockerfile # El Dockerfile está directamente en 'Cliente 1\'
+    build:
+      context: ../Productos
+      dockerfile: Dockerfile
     image: sandrocordova/udemy-microservicios:productos
     ports:
       - "8082:8082"
@@ -107,15 +143,16 @@ services:
     networks:
       - practica
     depends_on:
-       configserver:
-        condition: service_healthy # <-- CAMBIAR ESTO
-       mysql-db-producto:
-        condition: service_healthy #
-    volumes: # <-- ¡¡VOLUMES PARA DESARROLLO DE CLIENTE1!!
-      - ../Productos/src:/app/src # Sube tres niveles, entra en 'Cliente 1', luego 'src'
-      - ../Productos/pom.xml:/app/pom.xml # Sube tres niveles, entra en 'Cliente 1', para el pom.xml
-      #- ~/.m2:/root/.m2 # Tu caché de Maven (para descargas rápidas en el contenedor)
-    command: mvn spring-boot:run -Dspring.jpa.hibernate.ddl-auto=update # <-- Para que el contenedor compile y ejecute tu código en tiempo real
+      configserver:
+        condition: service_healthy
+      mysql-db-producto:
+        condition: service_healthy
+      eurekaserver:
+        condition: service_healthy
+    volumes:
+      - ../Productos/src:/app/src
+      - ../Productos/pom.xml:/app/pom.xml
+    command: mvn spring-boot:run -Dspring.jpa.hibernate.ddl-auto=update
     environment:
       SPRING_PROFILES_ACTIVE: dev
       SPRING_CONFIG_IMPORT: optional:configserver:http://configserver:8080
@@ -123,7 +160,16 @@ services:
       SPRING_DATASOURCE_USERNAME: root
       SPRING_DATASOURCE_PASSWORD: mysql
       SPRING_JPA_HIBERNATE_DDL_AUTO: update
-    
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eurekaserver:8090/eureka/
+      # CONFIGURACIÓN EUREKA PARA QUE FUNCIONE EL LINK
+      EUREKA_INSTANCE_PREFER_IP_ADDRESS: "false"
+      EUREKA_INSTANCE_HOSTNAME: localhost
+      EUREKA_INSTANCE_INSTANCE_ID: productos:localhost:8082
+      # ACTUATOR CONFIG
+      MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: "*"
+      MANAGEMENT_ENDPOINT_HEALTH_SHOW_DETAILS: "always"
+      MANAGEMENT_ENDPOINT_INFO_ENABLED: "true"
+
 networks:
   practica: 
     driver: bridge
